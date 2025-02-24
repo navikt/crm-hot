@@ -2,6 +2,11 @@
 private class HOT_ServiceAppointmentHandlerTest {
     @testSetup
     static void setup() {
+        TestDataFactory.getPublicGroup('HMS Troms og Finmark', 'group_4719');
+        TestDataFactory.getQueue('HMS Troms og Finmark', 'queue_4719', 'Thread__c');
+        TestDataFactory.getPublicGroup('HMS Nordland', 'group_4718');
+        TestDataFactory.getQueue('HMS Nordland', 'queue_4718', 'Thread__c');
+
         OperatingHours operatingHours = HOT_TestDataFactory.createOperatingHours();
         insert operatingHours;
         ServiceTerritory serviceTerritory = HOT_TestDataFactory.createServiceTerritory(operatingHours);
@@ -62,6 +67,114 @@ private class HOT_ServiceAppointmentHandlerTest {
             request.OwnerId,
             serviceAppointment.OwnerId,
             'Owner of ServiceAppointment was not set to owner of Request.'
+        );
+    }
+
+    @IsTest
+    public static void ownerOnThreadChangeServiceAppointmentTest() {
+        Group tromsOgFinnmarkQueue = [
+            SELECT Id, Name, DeveloperName
+            FROM Group
+            WHERE Type = 'Queue' AND DeveloperName = 'HMS Troms og Finmark'
+            LIMIT 1
+        ];
+
+        WorkType workType = [SELECT Id FROM WorkType LIMIT 1];
+
+        HOT_Request__c request = HOT_TestDataFactory.createRequest('TEST', workType);
+        insert request;
+        request.Status__c = 'Godkjent';
+        update request;
+
+        ServiceAppointment serviceAppointment = [
+            SELECT Id, OwnerId
+            FROM ServiceAppointment
+            WHERE HOT_Request__c = :request.Id
+        ];
+
+        Thread__c thread = new Thread__c();
+        thread.RecordTypeId = HOT_MessageHelper.getHOTThreadRecordType();
+        thread.CRM_Related_Object__c = serviceAppointment.Id;
+        thread.OwnerId = serviceAppointment.OwnerId;
+        insert thread;
+
+        thread = [
+            SELECT OwnerId, CRM_Related_Object__c
+            FROM Thread__c
+            WHERE CRM_Related_Object__c = :serviceAppointment.Id
+        ];
+
+        Test.startTest();
+        System.assertEquals(serviceAppointment.OwnerId, thread.OwnerId, 'Owner was not set correctly');
+
+        serviceAppointment.OwnerId = tromsOgFinnmarkQueue.Id;
+        update serviceAppointment;
+        Test.stopTest();
+
+        thread = [
+            SELECT OwnerId, CRM_Related_Object__c
+            FROM Thread__c
+            WHERE CRM_Related_Object__c = :serviceAppointment.Id
+        ];
+        System.assertEquals(tromsOgFinnmarkQueue.Id, thread.OwnerId, 'Owner was not set correctly');
+    }
+
+    @IsTest
+    public static void dispatcherOnThreadChangeServiceAppointmentTest() {
+        Profile adminProfile = [
+            SELECT Id, Name
+            FROM Profile
+            WHERE Name = 'System Administrator' OR Name = 'Systemadministrator'
+        ];
+        User admin = HOT_TestDataFactory.createUser('admin', adminProfile);
+        insert admin;
+
+        WorkType workType = HOT_TestDataFactory.createWorkType();
+        insert workType;
+
+        HOT_Request__c request = HOT_TestDataFactory.createRequest('TEST', workType);
+        insert request;
+        request.Status__c = 'Godkjent';
+        update request;
+
+        ServiceAppointment serviceAppointment = [
+            SELECT Id, HOT_DispatcherNew__c
+            FROM ServiceAppointment
+            WHERE HOT_Request__c = :request.Id
+        ];
+
+        Thread__c thread = new Thread__c();
+        thread.RecordTypeId = HOT_MessageHelper.getHOTThreadRecordType();
+        thread.CRM_Related_Object__c = serviceAppointment.Id;
+        thread.HOT_Dispatcher__c = serviceAppointment.HOT_DispatcherNew__c;
+        insert thread;
+
+        thread = [
+            SELECT HOT_Dispatcher__c, CRM_Related_Object__c
+            FROM Thread__c
+            WHERE CRM_Related_Object__c = :serviceAppointment.Id
+        ];
+
+        Test.startTest();
+        System.assertEquals(
+            serviceAppointment.HOT_DispatcherNew__c,
+            thread.HOT_Dispatcher__c,
+            'Dispatcher was not set correctly'
+        );
+
+        serviceAppointment.HOT_DispatcherNew__c = admin.Id;
+        update serviceAppointment;
+
+        thread = [
+            SELECT HOT_Dispatcher__c, CRM_Related_Object__c
+            FROM Thread__c
+            WHERE CRM_Related_Object__c = :serviceAppointment.Id
+        ];
+        Test.stopTest();
+        System.assertEquals(
+            serviceAppointment.HOT_DispatcherNew__c,
+            thread.HOT_Dispatcher__c,
+            'Dispatcher was not set correctly'
         );
     }
 

@@ -586,6 +586,35 @@ private class HOT_RequestHandlerTest {
         System.AssertEquals(admin.Id, t.HOT_Dispatcher__c);
     }
     @IsTest
+    public static void ownerOnThreadChangeRequest() {
+        Group moreQueue = TestDataFactory.getQueue('HMS Møre og Romsdal', 'queue_4715', 'Thread__c');
+        Group vikenQueue = TestDataFactory.getQueue('HMS Øst-Viken', 'queue_4701', 'Thread__c');
+
+        WorkType workType = HOT_TestDataFactory.createWorkType();
+        insert workType;
+
+        HOT_Request__c request = HOT_TestDataFactory.createRequest('TEST', workType);
+        insert request;
+
+        Thread__c thread = new Thread__c();
+        thread.RecordTypeId = HOT_MessageHelper.getHOTThreadRecordType();
+        thread.CRM_Related_Object__c = request.Id;
+        thread.HOT_Request__c = request.Id;
+        thread.OwnerId = moreQueue.Id;
+        insert thread;
+
+        Test.startTest();
+        thread = [SELECT OwnerId, HOT_Request__c FROM Thread__c WHERE HOT_Request__c = :request.Id];
+        System.assertEquals(moreQueue.Id, thread.OwnerId, 'Owner was not set correctly');
+
+        request.OwnerId = vikenQueue.Id;
+        update request;
+        thread = [SELECT OwnerId, HOT_Request__c FROM Thread__c WHERE HOT_Request__c = :request.Id];
+        Test.stopTest();
+
+        System.assertEquals(vikenQueue.Id, thread.OwnerId, 'Owner was not set correctly');
+    }
+    @IsTest
     public static void dispatcherOnThreadChangeWorkOrder() {
         WorkType workType = HOT_TestDataFactory.createWorkType();
         insert workType;
